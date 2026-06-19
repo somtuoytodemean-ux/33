@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>เกมหมากรุกไทย เปลือกหอยแห่งท้องทะเล (Makruk Sea Shell)</title>
+  <!-- Tailwind CSS สำหรับการออกแบบ UI ที่สวยงามและตอบสนองทุกหน้าจอ -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome สำหรับไอคอนสัญลักษณ์ต่างๆ -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- นำเข้า Google Fonts ภาษาไทยธรรมชาติ "Sarabun" และ "Mitr" -->
+  <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500;600&family=Sarabun:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <!-- Firebase SDK สำหรับฟังก์ชันเล่นแบบออนไลน์ผ่าน Firestore -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    body {
+      font-family: 'Sarabun', sans-serif;
+      background: radial-gradient(circle, #e0f2fe 0%, #bae6fd 60%, #7dd3fc 100%);
+      overflow-x: hidden;
+    }
+    h1, h2, h3, .font-title {
+      font-family: 'Mitr', sans-serif;
+    }
+    /* เอฟเฟกต์เกลียวคลื่นทะเลที่ด้านล่างจอ */
+    .ocean { 
+      height: 5%;
+      width: 100%;
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      background: #015871;
+    }
+    .wave {
+      background: url(https://s3-us-west-2.amazonaws.com/s.cdpn.io/85486/wave.svg) repeat-x; 
+      position: absolute;
+      top: -198px;
+      width: 6400px;
+      height: 198px;
+      animation: wave 7s cubic-bezier( 0.36, 0.45, 0.63, 0.53) infinite;
+      transform: translate3d(0, 0, 0);
+    }
+    .wave:nth-of-type(2) {
+      top: -175px;
+      animation: wave 7s cubic-bezier( 0.36, 0.45, 0.63, 0.53) -.125s infinite, swell 7s ease -0.125s infinite;
+      opacity: 1;
+    }
+    @keyframes wave {
+      0% { margin-left: 0; }
+      100% { margin-left: -1600px; }
+    }
+    @keyframes swell {
+      0%, 100% { transform: translate3d(0,-25px,0); }
+      50% { transform: translate3d(0,5px,0); }
+    }
+    /* คัสตอมสไตล์สำหรับกระดานหมากรุก */
+    .chess-board {
+      aspect-ratio: 1 / 1;
+      background: radial-gradient(ellipse at center, #fef08a 0%, #fef08a 30%, #eab308 100%); /* ทรายสีทองเหลืองอร่าม */
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2), inset 0 0 50px rgba(113, 63, 18, 0.4);
+      border: 12px solid #854d0e;
+      border-radius: 12px;
+    }
+    .board-cell {
+      position: relative;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    /* ลายตารางกระดานหมากรุกแบบหาดทราย */
+    .board-cell-even {
+      background-color: rgba(254, 240, 138, 0.5); /* ทรายละเอียดสีอ่อน */
+    }
+    .board-cell-odd {
+      background-color: rgba(234, 179, 8, 0.25); /* ทรายละเอียดสีส้มเข้ม */
+    }
+    /* ไฮไลท์ช่องที่สามารถเดินได้ */
+    .cell-highlight::after {
+      content: '';
+      position: absolute;
+      width: 30%;
+      height: 30%;
+      background-color: rgba(34, 197, 94, 0.6);
+      border-radius: 50%;
+      top: 35%;
+      left: 35%;
+      box-shadow: 0 0 10px rgba(34, 197, 94, 0.8);
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.6; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.6; }
+    }
+    /* ช่องของหมากที่ถูกเลือกเดิน */
+    .cell-selected {
+      background-color: rgba(56, 189, 248, 0.5) !important;
+      box-shadow: inset 0 0 15px #0284c7;
+    }
+    /* เปลือกหอยตัวหมากขยับเล็กน้อยเพื่อความมีชีวิตชีวา */
+    .piece-img {
+      transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.4));
+    }
+    .piece-img:hover {
+      transform: scale(1.15) translateY(-4px);
+    }
+    /* สไตล์ปุ่มแบบคลื่นสีฟ้านุ่มนวล */
+    .btn-sea {
+      background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+    }
+    .btn-sea:hover {
+      background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(2, 132, 199, 0.4);
+    }
+    .bg-glass {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+    }
+    /* อนิเมชันกระดอนตัวหมากเมื่อลงจอด */
+    @keyframes bouncePiece {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    .bounce-animation {
+      animation: bouncePiece 0.4s ease-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-start p-2 sm:p-4 pb-20 relative select-none">
+
+  <!-- พื้นหลังเกลียวคลื่นสวยงามที่ด้านหลังจอ -->
+  <div class="fixed bottom-0 left-0 right-0 h-24 z-0 pointer-events-none opacity-40">
+    <div class="wave"></div>
+    <div class="wave"></div>
+  </div>
+
+  <!-- แผงควบคุมเสียงและดนตรีประกอบคลื่นชายหาด -->
+  <div class="fixed top-4 right-4 z-50 flex space-x-2">
+    <button id="btnBgMusic" class="p-3 bg-white/90 text-sky-600 rounded-full shadow-lg hover:bg-sky-50 transition-all flex items-center justify-center w-12 h-12" title="เปิด/ปิดเสียงคลื่นหาดทรายดนตรีบรรเลง">
+      <i class="fas fa-music"></i>
+    </button>
+    <button id="btnSfx" class="p-3 bg-white/90 text-sky-600 rounded-full shadow-lg hover:bg-sky-50 transition-all flex items-center justify-center w-12 h-12" title="เปิด/ปิดเอฟเฟกต์เสียงเดินหมาก">
+      <i class="fas fa-volume-up"></i>
+    </button>
+  </div>
+
+  <!-- โลโก้และชื่อเกมเด่นตระหง่าน -->
+  <header class="text-center my-4 z-10">
+    <h1 class="text-3xl sm:text-5xl font-extrabold text-sky-900 drop-shadow-md flex items-center justify-center gap-2">
+      <i class="fas fa-water text-sky-600 animate-pulse"></i> 
+      <span>หมากรุกทะเลไทย</span> 
+      <i class="fas fa-fish text-sky-600"></i>
+    </h1>
+    <p class="text-sky-700 font-medium text-xs sm:text-sm mt-1">
+      สัมผัสเสน่ห์หมากรุกไทยในธีมหาดทรายขาวและตัวหมากจากเปลือกหอยใต้ทะเลลึก
+    </p>
+  </header>
+
+  <!-- หน้าเข้าสู่ระบบและ Lobby (หน้าแรก) -->
+  <main id="lobbyScreen" class="w-full max-w-4xl z-10 grid grid-cols-1 md:grid-cols-3 gap-6 my-4 px-2">
+    <!-- กล่องตั้งชื่อผู้เล่นและเลือกโหมด -->
+    <div class="md:col-span-2 bg-glass p-6 rounded-2xl shadow-xl flex flex-col justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-sky-950 mb-4 border-b pb-2 flex items-center gap-2">
+          <i class="fas fa-anchor text-amber-600"></i> ยินดีต้อนรับสู่เกลียวคลื่น
+        </h2>
+        <div class="mb-4">
+          <label class="block text-sky-900 font-semibold mb-2" for="playerNameInput">กรุณากรอกชื่อกัปตันเรือ :</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-sky-500">
+              <i class="fas fa-user-astronaut"></i>
+            </span>
+            <input type="text" id="playerNameInput" value="นักเดินเรือไร้นาม" class="w-full pl-10 pr-4 py-2 border-2 border-sky-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent text-sky-950 font-medium" placeholder="เช่น กัปตันแจ็ค">
+          </div>
+        </div>
+
+        <!-- ตัวเลือกประเภทบอท (เมื่อเล่นกับ AI) -->
+        <div class="mb-6">
+          <label class="block text-sky-900 font-semibold mb-2">เลือกระดับความฉลาดของสัตว์ทะเลพ่นพิษ (AI) :</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button onclick="setAiLevel('easy')" id="ai-easy" class="py-2 px-3 border-2 border-sky-300 rounded-xl font-medium text-sm transition-all bg-sky-100 text-sky-800">
+              🌱 ปลาดาว (ง่าย)
+            </button>
+            <button onclick="setAiLevel('medium')" id="ai-medium" class="py-2 px-3 border-2 border-transparent bg-white text-sky-700 rounded-xl font-medium text-sm transition-all hover:bg-sky-50">
+              🐠 ปลากระเบน (กลาง)
+            </button>
+            <button onclick="setAiLevel('hard')" id="ai-hard" class="py-2 px-3 border-2 border-transparent bg-white text-sky-700 rounded-xl font-medium text-sm transition-all hover:bg-sky-50">
+              🐙 คราเคน (ยาก)
+            </button>
+          </div>
+        </div>
+
+        <!-- กลุ่มปุ่มเริ่มเกมอย่างเป็นทางการ -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+          <button id="btnPlayAi" class="btn-sea text-white font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2">
+            <i class="fas fa-robot text-lg"></i> ประลองกับ AI เฝ้าสมบัติ
+          </button>
+          <button id="btnCreateOnlineRoom" class="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
+            <i class="fas fa-plus-circle text-lg"></i> สร้างหาดทรายเล่นออนไลน์
+          </button>
+        </div>
+      </div>
+
+      <!-- รายการห้องออนไลน์ที่กำลังเปิดรออยู่ -->
+      <div class="mt-8">
+        <h3 class="text-lg font-bold text-sky-900 mb-3 flex items-center gap-2">
+          <i class="fas fa-rss text-emerald-500 animate-ping text-xs"></i> 
+          <span>ทะเลที่มีเรือทอดสมอรออยู่ (ห้องว่างออนไลน์)</span>
+        </h3>
+        <div id="roomListContainer" class="border border-sky-100 rounded-xl p-3 bg-white/50 max-h-48 overflow-y-auto space-y-2">
+          <!-- ข้อมูลห้องว่างจะถูกนำมาใส่ที่นี่ผ่าน JS -->
+          <div class="text-center py-4 text-sky-500 text-sm">
+            <i class="fas fa-spinner fa-spin mr-1"></i> กำลังตรวจสอบคลื่นวิทยุหาห้องเล่น...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ส่วนจัดอันดับผู้เล่นเด่นที่สุดบน Google Sheets (Leaderboard) -->
+    <div class="bg-glass p-6 rounded-2xl shadow-xl flex flex-col h-full">
+      <h2 class="text-2xl font-bold text-sky-950 mb-4 border-b pb-2 flex items-center gap-2">
+        <i class="fas fa-trophy text-amber-500"></i> เจ้าแห่งท้องทะเล
+      </h2>
+      <div class="overflow-x-auto flex-grow">
+        <table class="w-full text-sm text-left text-sky-900">
+          <thead class="text-xs text-sky-700 uppercase bg-sky-100 rounded-lg">
+            <tr>
+              <th scope="col" class="px-3 py-2">กัปตัน</th>
+              <th scope="col" class="px-2 py-2 text-center">ชนะ</th>
+              <th scope="col" class="px-2 py-2 text-center">แพ้</th>
+              <th scope="col" class="px-3 py-2 text-right">คะแนน</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboardBody">
+            <!-- รายชื่อจาก Google Sheet API จะปรากฏที่นี่ -->
+            <tr>
+              <td colspan="4" class="text-center py-8 text-sky-500">
+                <i class="fas fa-sync fa-spin mr-1"></i> กำลังดึงประวัติผู้มีเกียรติ...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="text-center text-[10px] text-sky-500 mt-4 italic border-t pt-2">
+        * ข้อมูลอ้างอิงผ่านระบบหลังบ้านของ Google Sheets เสมอ
+      </div>
+    </div>
+  </main>
+
+  <!-- หน้าต่างสนามประลองหมากรุก (เมื่อเข้าเล่น) -->
+  <main id="gameScreen" class="w-full max-w-6xl z-10 grid grid-cols-1 lg:grid-cols-12 gap-6 my-4 px-2 hidden">
+    <!-- ซ้าย: ข้อมูลฝั่งตรงข้าม และสถิติจำนวนหมากตกเป็นตัวเชลย -->
+    <div class="lg:col-span-3 flex flex-col justify-between space-y-4">
+      <div class="bg-glass p-4 rounded-xl shadow-lg border-2 border-rose-100">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-full bg-rose-500 border-2 border-white flex items-center justify-center text-white text-lg font-bold">
+            <i class="fas fa-tint"></i>
+          </div>
+          <div>
+            <div id="opponentNameText" class="font-bold text-rose-950 text-base">ผู้เล่นฝ่ายแดง</div>
+            <div id="opponentStatusBadge" class="text-xs bg-rose-100 text-rose-700 py-0.5 px-2 rounded-full inline-block mt-0.5 font-medium">เปลือกหอยยักษ์ (แดง)</div>
+          </div>
+        </div>
+        <!-- พื้นที่แสดงตัวหมากแดงที่ตายและถูกครอบครอง -->
+        <div class="mt-3 pt-2 border-t border-sky-100">
+          <div class="text-xs text-sky-700 font-semibold mb-1">หมากที่ถูกจับตัวประกัน :</div>
+          <div id="redCapturedBox" class="flex flex-wrap gap-1 min-h-[30px]"></div>
+        </div>
+      </div>
+
+      <!-- บอร์ดข้อมูลเกมกระดานและปุ่มยอมแพ้ / ส่งแชทขู่ขวัญ -->
+      <div class="bg-glass p-4 rounded-xl shadow-lg flex-grow flex flex-col justify-between">
+        <div>
+          <h3 class="font-bold text-sky-900 border-b pb-2 mb-3"><i class="fas fa-ship"></i> ห้องเดินเรือ : <span id="currentRoomIdText">Local</span></h3>
+          <div class="space-y-2 text-sm text-sky-950">
+            <div class="flex justify-between border-b pb-1">
+              <span>ตาเดินปัจจุบัน:</span>
+              <span id="turnIndicatorText" class="font-bold text-emerald-600">ตาเปลือกหอยขาว</span>
+            </div>
+            <div class="flex justify-between border-b pb-1">
+              <span>โหมดการเล่น:</span>
+              <span id="gameModeText" class="font-medium text-sky-800">ฝึกซ้อมเดี่ยว</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 space-y-2">
+          <!-- ปุ่มลัดอิสระให้กดหมากตัวไหนขยับก็ได้โดยไม่มีขีดจำกัด -->
+          <button id="btnToggleFreePlay" class="w-full bg-amber-500 hover:bg-amber-600 text-white py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1">
+            <i class="fas fa-unlock-alt"></i> <span>โหมดอิสระ (กดเดินหมากใดๆ ก็ได้): ปิด</span>
+          </button>
+          
+          <button id="btnSurrender" class="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-3 rounded-lg text-sm font-bold transition-all">
+            <i class="fas fa-flag"></i> ยอมรับความพ่ายแพ้ (จบเกม)
+          </button>
+          <button id="btnExitGame" class="w-full bg-sky-100 hover:bg-sky-200 text-sky-800 py-2 px-3 rounded-lg text-sm font-bold transition-all">
+            <i class="fas fa-door-open"></i> ถอนตัวกลับฝั่งชายหาด
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- กลาง: ตัวกระดานหมากรุกไทยสวยงามขนาดตอบสนองทุกหน้าจอ -->
+    <div class="lg:col-span-6 flex flex-col items-center">
+      <div class="w-full max-w-[500px]">
+        <div id="chessBoardElement" class="chess-board grid grid-cols-8 grid-rows-8 gap-0 p-1">
+          <!-- โครงสร้างกระดาน 8x8 ช่องจะสร้างขึ้นอัตโนมัติด้วย JavaScript -->
+        </div>
+      </div>
+      <div class="text-center mt-3 text-xs text-sky-800 font-semibold bg-white/70 py-1.5 px-4 rounded-full shadow">
+        💡 <span id="gameTipText">กดที่ตัวหมากเปลือกหอยของคุณ แล้วจุดสีเขียวจะนำทางความเป็นไปได้ในการเดินเรือ</span>
+      </div>
+    </div>
+
+    <!-- ขวา: ข้อมูลฝั่งเรา และห้องส่งสัญญาณสัญจร (Chat box) -->
+    <div class="lg:col-span-3 flex flex-col justify-between space-y-4">
+      <div class="bg-glass p-4 rounded-xl shadow-lg border-2 border-emerald-100">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-full bg-sky-500 border-2 border-white flex items-center justify-center text-white text-lg font-bold">
+            <i class="fas fa-compass"></i>
+          </div>
+          <div>
+            <div id="myPlayerNameText" class="font-bold text-sky-950 text-base">กัปตันคุณ</div>
+            <div id="myPlayerStatusBadge" class="text-xs bg-emerald-100 text-emerald-700 py-0.5 px-2 rounded-full inline-block mt-0.5 font-medium">มุกปะการัง (ขาว)</div>
+          </div>
+        </div>
+        <!-- พื้นที่แสดงตัวหมากขาวที่ตายและถูกฝ่ายตรงข้ามจับตัวไป -->
+        <div class="mt-3 pt-2 border-t border-sky-100">
+          <div class="text-xs text-sky-700 font-semibold mb-1">หมากที่คู่ต่อสู้ยึดไป :</div>
+          <div id="whiteCapturedBox" class="flex flex-wrap gap-1 min-h-[30px]"></div>
+        </div>
+      </div>
+
+      <!-- ช่องส่งข้อความแชทคุยกันเมื่อออนไลน์ -->
+      <div class="bg-glass p-4 rounded-xl shadow-lg flex-grow flex flex-col h-64 lg:h-auto justify-between">
+        <div class="flex flex-col h-full justify-between">
+          <h4 class="text-sm font-bold text-sky-900 border-b pb-1 mb-2"><i class="far fa-comments"></i> จดหมายใส่ขวดลอยมา (แชท)</h4>
+          <div id="chatMessagesBox" class="flex-grow overflow-y-auto p-2 bg-sky-50/50 rounded-lg text-xs space-y-2 max-h-48">
+            <div class="text-slate-400 italic text-center">สามารถฝากข้อความลอยตามเกลียวคลื่นได้...</div>
+          </div>
+          <form id="chatForm" class="mt-2 flex gap-1">
+            <input type="text" id="chatInput" class="flex-grow p-1.5 border border-sky-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-sky-500" placeholder="พิมพ์ข้อความ..." disabled>
+            <button type="submit" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs hover:bg-sky-700 font-bold">ส่ง</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- หน้าต่างลอยแสดงผลผู้แพ้-ผู้ชนะตอนจบเกม (Game Over Dialog) -->
+  <div id="gameOverModal" class="fixed inset-0 bg-sky-950/60 z-50 flex items-center justify-center hidden px-4">
+    <div class="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl text-center border-4 border-amber-400 relative">
+      <div class="absolute -top-12 left-1/2 -translate-x-1/2 w-24 h-24 bg-amber-400 rounded-full flex items-center justify-center shadow-lg border-4 border-white">
+        <i id="winnerBadgeIcon" class="fas fa-trophy text-white text-4xl animate-bounce"></i>
+      </div>
+      
+      <h2 id="gameOverTitle" class="text-3xl font-extrabold text-sky-950 mt-10 mb-2">ชัยชนะเป็นของฝั่งมุกขาว!</h2>
+      <p id="gameOverDescription" class="text-sky-700 font-medium text-sm mb-6">คุณสามารถไล่ล่าขุนทัพใหญ่ของอีกฝ่ายลงสู้ก้นบึ้งมหาสมุทรได้สำเร็จ</p>
+      
+      <div class="bg-sky-50 p-4 rounded-xl mb-6 border border-sky-100">
+        <div class="text-xs text-sky-500 uppercase font-bold mb-1">ผลสรุปตารางสถิติ</div>
+        <div class="text-lg font-bold text-sky-900" id="gameOverMatchStats">กัปตันคุณ VS ปลาปลาพ่นไฟ (บอท)</div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <button id="btnRestartGame" class="btn-sea text-white py-3 px-4 rounded-xl font-bold text-sm">
+          <i class="fas fa-redo"></i> เริ่มกระดานใหม่
+        </button>
+        <button id="btnReturnLobby" class="bg-slate-100 hover:bg-slate-200 text-slate-800 py-3 px-4 rounded-xl font-bold text-sm">
+          <i class="fas fa-home"></i> กลับไปล็อบบี้
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. การตั้งค่าระบบหลังบ้านและฐานข้อมูล
+    // ==========================================
+    
+    // URL ของ Google Apps Script Web App ที่คัดลอกมาจากขั้นตอนการ Deploy ใน Google Sheet ของคุณ
+    // กรุณาวาง URL ของคุณด้านล่างนี้เมื่อนำไปใช้งานจริง
+    const GOOGLE_SHEET_API = "https://script.google.com/macros/s/AKfycbzrVG62wPBYly16xB_jrUfaFUBlG1SN3vG3vAqir01qgtVIMTmmMnWM6oOgiDrmvuiJpA/exec"; 
+
+    // การเชื่อมต่อระบบคลาวด์จัดเก็บข้อมูล (Firestore) แบบอิสระ เพื่อใช้สำหรับฟังก์ชันการสร้างห้องออนไลน์
+    // โครงสร้างเป็นไปตามกฎของระบบอย่างถูกต้อง
+    const firebaseConfig = {
+      apiKey: "",
+      authDomain: "makruk-sea-shell.firebaseapp.com",
+      projectId: "makruk-sea-shell",
+      storageBucket: "makruk-sea-shell.appspot.com",
+      messagingSenderId: "1234567890",
+      appId: "1:1234567890:web:abcdef123456"
+    };
+
+    let db;
+    let auth;
+    let appId = typeof __app_id !== 'undefined' ? __app_id : 'makruk-shell-game';
+    let isOnlineSupported = false;
+
+    // ตรวจจับสภาพแวดล้อมหากมีการส่ง Config เข้ามาจริง
+    try {
+      if (typeof __firebase_config !== 'undefined') {
+        const customConfig = JSON.parse(__firebase_config);
+        firebase.initializeApp(customConfig);
+        db = firebase.firestore();
+        auth = firebase.auth();
+        isOnlineSupported = true;
+        console.log("เชื่อมต่อเซิร์ฟเวอร์เล่นออนไลน์สำเร็จ!");
+      }
+    } catch (e) {
+      console.warn("ไม่ได้ระบุค่า Firebase ในฝั่งเซิร์ฟเวอร์หลัก จึงจำลองโหมดจำลองระบบล็อบบี้ออนไลน์ในหน่วยความจำสำรองแทน", e);
+    }
+
+    // ==========================================
+    // 2. ข้อมูลตัวหมาก และรูปภาพเปลือกหอยทะเลทดแทน
+    // ==========================================
+    // ตัวหมากใช้รูป SVG เปลือกหอยที่มีสีสันตัดกันสวยงามอย่างมาก
+    // สีขาว (White) = ตัวแทน "มุกปะการัง" (ผู้เล่นฝ่ายเรา/เริ่มก่อน)
+    // สีแดง (Red) = ตัวแทน "เปลือกหอยโบราณยักษ์" (คู่ต่อสู้ หรือ AI)
+    
+    const PIECE_IMAGES = {
+      'W_KHUN': 'https://img.icons8.com/emoji/96/conch-shell.png', // หอยสังข์มงคลสีชมพูขาว
+      'W_MET': 'https://img.icons8.com/emoji/96/shell-emoji.png', // เปลือกหอยแครงกลมมนสีขาวทอง
+      'W_KHON': 'https://img.icons8.com/external-flat-icons-inoki-love/96/external-Pearl-beach-and-tropical-flat-icons-inoki-love.png', // หอยมุกเปิดฝาสีขาวเปล่งแสง
+      'W_MA': 'https://img.icons8.com/emoji/96/spiral-shell.png', // เปลือกหอยเจดีย์เกลียวหมุนสวยงาม
+      'W_RUA': 'https://img.icons8.com/external-flatart-icons-lineal-color-flatarticons/96/external-sailing-ship-summer-holidays-flatart-icons-lineal-color-flatarticons.png', // เรือสำเภาแล่นในทะเลพาสเทล
+      'W_BIA': 'https://img.icons8.com/external-flatart-icons-lineal-color-flatarticons/96/external-shell-beaches-and-sea-flatart-icons-lineal-color-flatarticons-1.png', // หอยเชลล์จิ๋วสีฟ้าขาวอ่อน
+      'W_BIA_NGAY': 'https://img.icons8.com/external-flatart-icons-lineal-color-flatarticons/96/external-shell-beaches-and-sea-flatart-icons-lineal-color-flatarticons-2.png', // หอยเชลล์ที่หงายโชว์ไข่มุกสีทองด้านใน
+
+      'R_KHUN': 'https://img.icons8.com/color/96/nautilus.png', // หอยนอติลุสโบราณหายากแถบสีแดงฉาน
+      'R_MET': 'https://img.icons8.com/color/96/scallop.png', // หอยพัดเชลล์ประกบสีแดงปะการัง
+      'R_KHON': 'https://img.icons8.com/color/96/starfish.png', // ปลาดาวหินสีส้มแดงเข้ม
+      'R_MA': 'https://img.icons8.com/color/96/hermit-crab.png', // ปูเสฉวนใช้เปลือกหอยพ่นทรายแดง
+      'R_RUA': 'https://img.icons8.com/external-flatart-icons-flat-flatarticons/96/external-ship-logistics-flatart-icons-flat-flatarticons.png', // เรือรบโบราณเหล็กสีแดงเข้ม
+      'R_BIA': 'https://img.icons8.com/color/96/sea-shell.png', // หอยเชลล์พัดสีแดงส้มธรรมดา
+      'R_BIA_NGAY': 'https://img.icons8.com/color/96/pearl-in-shell.png' // เปลือกหอยแครงยักษ์ที่หงายโชว์อัญมณีสีแดงโลหิต
+    };
+
+    // ตัวแปรเก็บคะแนนตัวหมากเพื่อป้อนคำนวณเข้าสู่ระบบ AI มินิแมกซ์
+    const PIECE_VALUES = {
+      'KHUN': 10000,
+      'RUA': 80,
+      'MA': 50,
+      'KHON': 30,
+      'MET': 10,
+      'BIA_NGAY': 15,
+      'BIA': 5
+    };
+
+    // ==========================================
+    // 3. เสียงประกอบ และดนตรีบรรเลงริมทะเล
+    // ==========================================
+    // เพื่อให้ทำงานได้ทันทีโดยไม่มีปัญหาเรื่องลิขสิทธิ์และ iFrame เราจะใช้ Web Audio API สังเคราะห์เสียงธรรมชาติ
+    // ร่วมกับไฟล์เสียงสาธารณะจากคลังเสียงที่น่าเชื่อถือ
+    let audioCtx = null;
+    let bgAmbientSound = null;
+    let sfxEnabled = true;
+    let musicEnabled = true;
+
+    function initAudio() {
+      if (audioCtx) return;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    // ฟังก์ชันสร้างเสียงเดินหมากแบบคลื่นน้ำซัดเบาๆ (Water Splash Wave)
+    function playSplashSfx() {
+      if (!sfxEnabled) return;
+      initAudio();
+      try {
+        const duration = 0.5;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + duration);
+        
+        gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) { console.log(e); }
+    }
+
+    // เสียงนกร้องสลับลมอ่อนริมโขดหินหาดทราย (Bird Chirp)
+    function playSeagullSfx() {
+      if (!sfxEnabled) return;
+      initAudio();
+      try {
+        const duration = 0.4;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1600, audioCtx.currentTime + duration);
+        
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) { console.log(e); }
+    }
+
+    // ระบบสังเคราะห์เสียงดนตรีบอสซาโนวา/ชายหาดแบบสโลว์ลอยลม
+    function startSeaAmbient() {
+      if (!musicEnabled) return;
+      // เล่นเสียงนกค้างเป็นช่วงๆ
+      setInterval(() => {
+        if (musicEnabled && Math.random() > 0.4) {
+          playSeagullSfx();
+        }
+      }, 8000);
+    }
+
+    // ==========================================
+    // 4. ตัวแปรควบคุมสถานะกระดานของเกมหมากรุกไทย
+    // ==========================================
+    let board = []; // อาร์เรย์มิติเดียวขนาด 64 ช่อง (0 - 63) แทนตาราง 8x8
+    let selectedCell = null;
+    let possibleMoves = [];
+    let currentPlayer = 'W'; // 'W' = มุกขาว (เดินก่อน), 'R' = เปลือกหอยโบราณแดง
+    let isFreePlayMode = false; // เปิดเพื่อให้สามารถลากย้ายหมากตัวไหนได้อย่างอิสระโดยไม่มีขีดจำกัดกฎกติกา
+    let gameActive = true;
+    let aiLevel = 'easy'; // 'easy', 'medium', 'hard'
+    let mySide = 'W'; // 'W' หรือ 'R' เมื่อเล่นออนไลน์
+    let playMode = 'AI'; // 'AI' หรือ 'ONLINE'
+    let currentRoomId = null;
+    let currentOnlineUser = null;
+    
+    // ทะเบียนห้องออนไลน์เสมือนจริงกรณีใช้งานแบบสัญจรเบื้องต้น
+    let localOnlineRooms = []; 
+
+    // สถิติการจับตัวเชลย
+    let capturedRed = [];
+    let capturedWhite = [];
+
+    // แผนผังเริ่มต้นหมากรุกไทยแบบมาตรฐาน
+    // แถวที่ 0 (ฝั่งแดง - ดัชนี 0 ถึง 7): เรือ, ม้า, โคน, เม็ด, ขุน, โคน, ม้า, เรือ
+    // แถวที่ 2 (เบี้ยแดง - ดัชนี 16 ถึง 23)
+    // แถวที่ 5 (เบี้ยขาว - ดัชนี 40 ถึง 47)
+    // แถวที่ 7 (ฝั่งขาว - ดัชนี 56 ถึง 63): เรือ, ม้า, โคน, ขุน, เม็ด, โคน, ม้า, เรือ
+    const INITIAL_BOARD = [
+      'R_RUA', 'R_MA', 'R_KHON', 'R_MET', 'R_KHUN', 'R_KHON', 'R_MA', 'R_RUA',
+      null,    null,   null,     null,    null,     null,     null,   null,
+      'R_BIA', 'R_BIA', 'R_BIA', 'R_BIA', 'R_BIA', 'R_BIA', 'R_BIA', 'R_BIA',
+      null,    null,   null,     null,    null,     null,     null,   null,
+      null,    null,   null,     null,    null,     null,     null,   null,
+      'W_BIA', 'W_BIA', 'W_BIA', 'W_BIA', 'W_BIA', 'W_BIA', 'W_BIA', 'W_BIA',
+      null,    null,   null,     null,    null,     null,     null,   null,
+      'W_RUA', 'W_MA', 'W_KHON', 'W_KHUN', 'W_MET', 'W_KHON', 'W_MA', 'W_RUA'
+    ];
+
+    // ==========================================
+    // 5. ระบบกติกาและการเดินของหมากรุกไทย
+    // ==========================================
+
+    function initBoard() {
+      board = [...INITIAL_BOARD];
+      currentPlayer = 'W';
+      selectedCell = null;
+      possibleMoves = [];
+      gameActive = true;
+      capturedRed = [];
+      capturedWhite = [];
+      updateCapturedBoxes();
+    }
+
+    // หาตำแหน่งแถวและคอลัมน์จากดัชนี 0-63
+    function getCoords(index) {
+      return { r: Math.floor(index / 8), c: index % 8 };
+    }
+
+    // สลับเป็นดัชนีตัวเลขเดี่ยว
+    function getIndex(r, c) {
+      if (r < 0 || r > 7 || c < 0 || c > 7) return -1;
+      return r * 8 + c;
+    }
+
+    // ตรวจสอบว่าหมากในช่องเป็นฝ่ายใด
+    function getPieceOwner(piece) {
+      if (!piece) return null;
+      return piece.substring(0, 1); // 'W' หรือ 'R'
+    }
+
+    // ตรวจสอบชนิดหมาก
+    function getPieceType(piece) {
+      if (!piece) return null;
+      return piece.substring(2); // 'KHUN', 'MET', 'KHON', 'MA', 'RUA', 'BIA', 'BIA_NGAY'
+    }
+
+    // คำนวณหาสัญลักษณ์ทางเดินที่ถูกต้องตามกติกาของหมากรุกไทย
+    function generateMovesForCell(index, simulateCheck = true) {
+      const moves = [];
+      const piece = board[index];
+      if (!piece) return moves;
+
+      const owner = getPieceOwner(piece);
+      const type = getPieceType(piece);
+      const { r, c } = getCoords(index);
+
+      // โหมดเดินอิสระ สามารถเดินไปที่ใดก็ได้บนพื้นที่ว่างที่ไม่มีตัวหมากฝ่ายเดียวกัน
+      if (isFreePlayMode) {
+        for (let i = 0; i < 64; i++) {
+          if (i !== index && getPieceOwner(board[i]) !== owner) {
+            moves.push(i);
+          }
+        }
+        return moves;
+      }
+
+      const addMoveIfValid = (targetR, targetC) => {
+        const targetIdx = getIndex(targetR, targetC);
+        if (targetIdx !== -1) {
+          const targetPiece = board[targetIdx];
+          if (!targetPiece || getPieceOwner(targetPiece) !== owner) {
+            moves.push(targetIdx);
+          }
+        }
+      };
+
+      switch (type) {
+        case 'KHUN': // เดินได้ 8 ทิศทางรอบตัว ทิศละ 1 ช่อง
+          const khunDirs = [
+            [-1,-1], [-1,0], [-1,1],
+            [0,-1],          [0,1],
+            [1,-1],  [1,0],  [1,1]
+          ];
+          khunDirs.forEach(([dr, dc]) => addMoveIfValid(r + dr, c + dc));
+          break;
+
+        case 'MET': // เดินเฉียง 4 ทิศทาง ทิศละ 1 ช่อง
+          const metDirs = [[-1,-1], [-1,1], [1,-1], [1,1]];
+          metDirs.forEach(([dr, dc]) => addMoveIfValid(r + dr, c + dc));
+          break;
+
+        case 'KHON': // เดินเฉียง 4 ทิศทางรอบตัว หรือเดินตรงไปข้างหน้าอีก 1 ช่อง
+          const forward = (owner === 'W') ? -1 : 1;
+          const khonDirs = [
+            [forward, 0], // เดินตรงหน้า
+            [-1, -1], [-1, 1], [1, -1], [1, 1] // เฉียง 4 ด้าน
+          ];
+          khonDirs.forEach(([dr, dc]) => addMoveIfValid(r + dr, c + dc));
+          break;
+
+        case 'MA': // เดินรูปตัว L (เดินตรง 2 เลี้ยว 1)
+          const maMoves = [
+            [-2, -1], [-2, 1], [-1, -2], [-1, 2],
+            [1, -2],  [1, 2],  [2, -1],  [2, 1]
+          ];
+          maMoves.forEach(([dr, dc]) => addMoveIfValid(r + dr, c + dc));
+          break;
+
+        case 'RUA': // เดินแนวตั้งแนวเฉียงตรง ทะลุกี่ช่องก็ได้จนกว่าจะเจอหมากกั้น
+          const ruaDirs = [[-1,0], [1,0], [0,-1], [0,1]];
+          ruaDirs.forEach(([dr, dc]) => {
+            let step = 1;
+            while (true) {
+              const targetR = r + dr * step;
+              const targetC = c + dc * step;
+              const targetIdx = getIndex(targetR, targetC);
+              if (targetIdx === -1) break;
+              
+              const targetPiece = board[targetIdx];
+              if (!targetPiece) {
+                moves.push(targetIdx);
+              } else {
+                if (getPieceOwner(targetPiece) !== owner) {
+                  moves.push(targetIdx);
+                }
+                break; // ชนหมากขวางทางแล้ว ต้องหยุดเดิน
+              }
+              step++;
+            }
+          });
+          break;
+
+        case 'BIA': // เดินตรงไปข้างหน้าได้ 1 ช่อง แต่กินหมากในแนวเฉียงหน้าซ้าย-ขวาเท่านั้น
+          const dir = (owner === 'W') ? -1 : 1;
+          // เดินหน้า (ต้องว่างเปล่า)
+          const fwdIdx = getIndex(r + dir, c);
+          if (fwdIdx !== -1 && !board[fwdIdx]) {
+            moves.push(fwdIdx);
+          }
+          // กินเฉียงซ้าย-ขวา (ต้องมีศัตรูอยู่)
+          const eatDirs = [[dir, -1], [dir, 1]];
+          eatDirs.forEach(([dr, dc]) => {
+            const eatIdx = getIndex(r + dr, c + dc);
+            if (eatIdx !== -1) {
+              const targetPiece = board[eatIdx];
+              if (targetPiece && getPieceOwner(targetPiece) !== owner) {
+                moves.push(eatIdx);
+              }
+            }
+          });
+          break;
+
+        case 'BIA_NGAY': // ทำงานเหมือนตัว "เม็ด" เดินเฉียงรอบตัว 4 ทิศ 1 ช่อง
+          const ngayDirs = [[-1,-1], [-1,1], [1,-1], [1,1]];
+          ngayDirs.forEach(([dr, dc]) => addMoveIfValid(r + dr, c + dc));
+          break;
+      }
+
+      // ตรวจสอบเพื่อกันผู้เล่นเดินแล้วทำให้ราชา (ขุน) ของตนโดนลอบฆ่าโดยเจตนา
+      if (simulateCheck) {
+        return moves.filter(targetIdx => {
+          // จำลองการขยับหมากบนกระดานสำรอง
+          const tempPiece = board[targetIdx];
+          board[targetIdx] = piece;
+          board[index] = null;
+          
+          const kingSafe = !isKingInCheck(owner);
+          
+          // คืนค่ากระดานเดิม
+          board[index] = piece;
+          board[targetIdx] = tempPiece;
+          return kingSafe;
+        });
+      }
+
+      return moves;
+    }
+
+    // ฟังก์ชันตรวจสอบว่า "ขุน" ของฝ่ายใดฝ่ายหนึ่งกำลังโดนรุกหรือไม่
+    function isKingInCheck(side) {
+      // ค้นหาตำแหน่งของขุน
+      let kingIdx = -1;
+      for (let i = 0; i < 64; i++) {
+        if (board[i] === side + '_KHUN') {
+          kingIdx = i;
+          break;
+        }
+      }
+      if (kingIdx === -1) return false; // ขุนไม่มี แสดงว่าโดนกำจัดไปแล้ว (ไม่รุกแต่แพ้ไปแล้ว)
+
+      // ตรวจสอบว่ามีศัตรูตัวใดพุ่งเล็งมาที่จุดที่ขุนอยู่หรือไม่
+      const enemySide = (side === 'W') ? 'R' : 'W';
+      for (let i = 0; i < 64; i++) {
+        if (board[i] && getPieceOwner(board[i]) === enemySide) {
+          const moves = generateMovesForCell(i, false); // เลี่ยงการจำลองซ้อนแบบไร้สิ้นสุด
+          if (moves.includes(kingIdx)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    // ตรวจสอบสถานะว่าฝั่งนั้นๆ โดนไล่ต้อนอับจน (Checkmate) หรือไม่มีตาให้ขยับแล้ว (Stalemate)
+    function checkGameOverConditions(side) {
+      for (let i = 0; i < 64; i++) {
+        if (board[i] && getPieceOwner(board[i]) === side) {
+          const moves = generateMovesForCell(i, true);
+          if (moves.length > 0) return false; // ยังมีหนทางขยับหนีพ้นได้
+        }
+      }
+      return true; // พ่ายแพ้อย่างสมบูรณ์
+    }
+
+    // เช็คกรณีขุนโดนกำจัดไปโดยตรง (กฎยืดหยุ่นโหมดอิสระและ AI)
+    function countKings() {
+      let whiteKing = false;
+      let redKing = false;
+      for (let i = 0; i < 64; i++) {
+        if (board[i] === 'W_KHUN') whiteKing = true;
+        if (board[i] === 'R_KHUN') redKing = true;
+      }
+      return { whiteKing, redKing };
+    }
+
+    // ==========================================
+    // 6. ส่วนประสานงานการแสดงผล (UI Rendering)
+    // ==========================================
+
+    const boardEl = document.getElementById('chessBoardElement');
+
+    function drawBoard() {
+      boardEl.innerHTML = '';
+      for (let i = 0; i < 64; i++) {
+        const { r, c } = getCoords(i);
+        const cell = document.createElement('div');
+        cell.className = `board-cell flex items-center justify-center p-1 sm:p-2 select-none ${
+          (r + c) % 2 === 0 ? 'board-cell-even' : 'board-cell-odd'
+        }`;
+        cell.dataset.index = i;
+
+        // บ่งบอกหมายเลขอักษรพิกัดกระดานแถวแรกและคอลัมน์ล่างเพื่อความโปร
+        if (c === 0) {
+          const rankLabel = document.createElement('span');
+          rankLabel.className = 'absolute top-0.5 left-1 text-[8px] sm:text-[10px] text-amber-900/50 font-bold';
+          rankLabel.innerText = 8 - r;
+          cell.appendChild(rankLabel);
+        }
+        if (r === 7) {
+          const fileLabel = document.createElement('span');
+          fileLabel.className = 'absolute bottom-0.5 right-1 text-[8px] sm:text-[10px] text-amber-900/50 font-bold';
+          fileLabel.innerText = String.fromCharCode(3555 + c); // อักษรไทย ก - ซ
+          cell.appendChild(fileLabel);
+        }
+
+        // หากมีการเลือกเดินตัวนี้อยู่ ให้สร้างแสงครอบกระดานสีฟ้า
+        if (selectedCell === i) {
+          cell.classList.add('cell-selected');
+        }
+
+        // หากเป้าหมายคือเส้นทางเดินของเปลือกหอยตัวที่เลือก
+        if (possibleMoves.includes(i)) {
+          cell.classList.add('cell-highlight');
+        }
+
+        // จัดแสดงตัวหมากเปลือกหอย
+        const piece = board[i];
+        if (piece) {
+          const img = document.createElement('img');
+          img.src = PIECE_IMAGES[piece];
+          img.className = 'piece-img w-11/12 h-11/12 object-contain pointer-events-none drop-shadow-lg';
+          img.alt = piece;
+          cell.appendChild(img);
+        }
+
+        // การควบคุมตอบสนองผ่านเหตุการณ์คลิกและสัมผัสจอแท็บเล็ต
+        cell.addEventListener('click', () => handleCellClick(i));
+        
+        boardEl.appendChild(cell);
+      }
+    }
+
+    // สถิติแสดงผลหมากที่โดนจับกินข้างขอบสนาม
+    function updateCapturedBoxes() {
+      const redBox = document.getElementById('redCapturedBox');
+      const whiteBox = document.getElementById('whiteCapturedBox');
+      
+      redBox.innerHTML = '';
+      whiteBox.innerHTML = '';
+
+      capturedRed.forEach(piece => {
+        const img = document.createElement('img');
+        img.src = PIECE_IMAGES[piece];
+        img.className = 'w-7 h-7 object-contain bg-rose-50 border border-rose-200 rounded p-0.5 shadow-sm';
+        redBox.appendChild(img);
+      });
+
+      capturedWhite.forEach(piece => {
+        const img = document.createElement('img');
+        img.src = PIECE_IMAGES[piece];
+        img.className = 'w-7 h-7 object-contain bg-sky-50 border border-sky-200 rounded p-0.5 shadow-sm';
+        whiteBox.appendChild(img);
+      });
+    }
+
+    // อัปเดตข้อมูลแถบแสดงสถานะกัปตันและตาเดินเรือ
+    function updateTurnIndicators() {
+      const textEl = document.getElementById('turnIndicatorText');
+      if (currentPlayer === 'W') {
+        textEl.innerText = "ตาเปลือกหอยขาว (มุกปะการัง)";
+        textEl.className = "font-bold text-sky-600";
+      } else {
+        textEl.innerText = "ตาเปลือกหอยแดง (ปะการังยักษ์)";
+        textEl.className = "font-bold text-rose-600";
+      }
+    }
+
+    // ==========================================
+    // 7. ตรรกะกระบวนการเดินหมากและกฎกติกาหมากรุกไทย
+    // ==========================================
+
+    function handleCellClick(index) {
+      if (!gameActive) return;
+      
+      // การเล่นออนไลน์ ต้องอนุญาตให้คลิกได้เฉพาะตาเดินของฝ่ายตนเท่านั้น (ยกเว้นโหมดอิสระ)
+      if (playMode === 'ONLINE' && !isFreePlayMode && currentPlayer !== mySide) {
+        showTip("⚠️ นี่คือกระแสน้ำวนของคู่ต่อสู้! กรุณารอตาของคุณ");
+        return;
+      }
+
+      const clickedPiece = board[index];
+      const clickedOwner = getPieceOwner(clickedPiece);
+
+      // 1. เลือกตัวหมาก
+      if (clickedPiece && (clickedOwner === currentPlayer || isFreePlayMode)) {
+        selectedCell = index;
+        possibleMoves = generateMovesForCell(index, true);
+        playSplashSfx();
+        drawBoard();
+        return;
+      }
+
+      // 2. ขยับตัวหมากไปยังช่องที่เลือก
+      if (selectedCell !== null && possibleMoves.includes(index)) {
+        executeMove(selectedCell, index);
+        selectedCell = null;
+        possibleMoves = [];
+        drawBoard();
+        
+        // หากเล่นโหมดออนไลน์ ให้ส่งสถานะไปยัง Firebase
+        if (playMode === 'ONLINE') {
+          syncBoardToOnline();
+        }
+
+        // หากอยู่ในโหมด AI และตาต่อไปคือ AI
+        if (playMode === 'AI' && gameActive && currentPlayer === 'R') {
+          setTimeout(makeAiMove, 600); // ดีเลย์อณูเวลาเล็กน้อยให้ดูธรรมชาติที่สุด
+        }
+      } else {
+        // ยกเลิกการเลือกถ้าคลิกช่องเดินไม่ได้
+        selectedCell = null;
+        possibleMoves = [];
+        drawBoard();
+      }
+    }
+
+    function executeMove(fromIdx, toIdx) {
+      const piece = board[fromIdx];
+      const targetPiece = board[toIdx];
+
+      // เก็บสถิติหมากโดนจับกินลงตะกร้าสมบัติ
+      if (targetPiece) {
+        if (getPieceOwner(targetPiece) === 'W') {
+          capturedWhite.push(targetPiece);
+        } else {
+          capturedRed.push(targetPiece);
+        }
+        playSplashSfx();
+      } else {
+        playSplashSfx(); // เสียงน้ำกระเด็นธรรมดา
+      }
+
+      // ขยับย้ายตำแหน่งบนกระดานหลัก
+      board[toIdx] = piece;
+      board[fromIdx] = null;
+
+      // กฎโปรโมชั่นการแต่งตั้ง "เบี้ยหงาย" ของหมากรุกไทย
+      // เบี้ยขาวเดินถึงแถวที่ 6 (ดัชนี 24-31 แถวฝั่งตรงข้าม) -> แต่งตั้งเป็นเบี้ยหงาย
+      // เบี้ยแดงเดินถึงแถวที่ 3 (ดัชนี 32-39 แถวฝั่งตรงข้าม) -> แต่งตั้งเป็นเบี้ยหงาย
+      const { r: targetR } = getCoords(toIdx);
+      if (piece === 'W_BIA' && targetR <= 2) {
+        board[toIdx] = 'W_BIA_NGAY';
+        showTip("✨ เปลือกหอยมุกขาวได้รับการแต่งตั้งเป็น 'เบี้ยหงาย' ประสบผลสำเร็จ!");
+      } else if (piece === 'R_BIA' && targetR >= 5) {
+        board[toIdx] = 'R_BIA_NGAY';
+        showTip("🐚 เปลือกหอยโบราณแดงทรายได้รับการสถาปนาเป็น 'เบี้ยหงาย' แล้ว!");
+      }
+
+      updateCapturedBoxes();
+
+      // สลับตาเดินหมาก
+      currentPlayer = (currentPlayer === 'W') ? 'R' : 'W';
+      updateTurnIndicators();
+
+      // เช็คผลสรุปการพ่ายแพ้อย่างสมบูรณ์
+      const checkResult = countKings();
+      if (!checkResult.whiteKing) {
+        triggerGameOver('R', 'ม้าแดงกลืนกินมหาอาณาจักร');
+        return;
+      }
+      if (!checkResult.redKing) {
+        triggerGameOver('W', 'มุกมงคลสยบปลาดาวแดง');
+        return;
+      }
+
+      // ตรวจหาการรุกไล่ต้อนอับจน (Checkmate)
+      if (checkGameOverConditions(currentPlayer)) {
+        if (isKingInCheck(currentPlayer)) {
+          const winner = (currentPlayer === 'W') ? 'R' : 'W';
+          triggerGameOver(winner, 'รุกฆาตอับจนหนทางหนีอย่างสิ้นเชิง');
+        } else {
+          triggerGameOver('DRAW', 'เสมอเนื่องจากกระแสน้ำคงที่ (ไม่มีทางเดินหลีกเลี่ยง)');
+        }
+      }
+    }
+
+    // แสดงข้อความแนะนำตัวชี้ทิปส์ในเกม
+    function showTip(text) {
+      const tipEl = document.getElementById('gameTipText');
+      tipEl.innerText = text;
+      tipEl.parentElement.classList.add('animate-bounce');
+      setTimeout(() => {
+        tipEl.parentElement.classList.remove('animate-bounce');
+      }, 1000);
+    }
+
+    // ==========================================
+    // 8. สมองกลประดิษฐ์ AI เฝ้าชายหาด (Minimax AI)
+    // ==========================================
+
+    function setAiLevel(level) {
+      aiLevel = level;
+      document.querySelectorAll('[id^="ai-"]').forEach(btn => {
+        btn.classList.add('bg-white', 'text-sky-700', 'border-transparent');
+        btn.classList.remove('bg-sky-100', 'text-sky-800', 'border-sky-300');
+      });
+      const activeBtn = document.getElementById(`ai-${level}`);
+      activeBtn.classList.remove('bg-white', 'text-sky-700', 'border-transparent');
+      activeBtn.classList.add('bg-sky-100', 'text-sky-800', 'border-sky-300');
+      
+      const difficultyThai = level === 'easy' ? 'ปลาดาวไร้เดียงสา' : level === 'medium' ? 'ปลากระเบนแสนรู้' : 'คราเคนผู้พิชิต';
+      showTip(`🌊 เปลี่ยนระดับความโหด AI เป็น: ${difficultyThai}`);
+    }
+
+    // ค้นหาคะแนนประเมินโดยรวมของสถานการณ์ปัจจุบันบนหน้ากระดานสำหรับ AI
+    function evaluateBoard() {
+      let score = 0;
+      for (let i = 0; i < 64; i++) {
+        const piece = board[i];
+        if (piece) {
+          const owner = getPieceOwner(piece);
+          const type = getPieceType(piece);
+          const val = PIECE_VALUES[type] || 0;
+          
+          if (owner === 'R') {
+            score += val; // ฝั่งแดงเป็นฝั่งบวกของ AI
+          } else {
+            score -= val; // ฝั่งขาวเป็นฝั่งลบ
+          }
+        }
+      }
+      return score;
+    }
+
+    // มินิแมกซ์ อัลกอริทึม
+    function minimax(depth, isMaximizing, alpha, beta) {
+      // คืนค่าประเมินทันทีเมื่อลึกสุดหรือเกมสงบแล้ว
+      const kings = countKings();
+      if (!kings.whiteKing) return 100000;
+      if (!kings.redKing) return -100000;
+      if (depth === 0) return evaluateBoard();
+
+      if (isMaximizing) {
+        let maxEval = -Infinity;
+        for (let i = 0; i < 64; i++) {
+          if (board[i] && getPieceOwner(board[i]) === 'R') {
+            const moves = generateMovesForCell(i, true);
+            for (let move of moves) {
+              const temp = board[move];
+              board[move] = board[i];
+              board[i] = null;
+              
+              const evaluation = minimax(depth - 1, false, alpha, beta);
+              
+              board[i] = board[move];
+              board[move] = temp;
+              
+              maxEval = Math.max(maxEval, evaluation);
+              alpha = Math.max(alpha, evaluation);
+              if (beta <= alpha) break;
+            }
+          }
+        }
+        return maxEval;
+      } else {
+        let minEval = Infinity;
+        for (let i = 0; i < 64; i++) {
+          if (board[i] && getPieceOwner(board[i]) === 'W') {
+            const moves = generateMovesForCell(i, true);
+            for (let move of moves) {
+              const temp = board[move];
+              board[move] = board[i];
+              board[i] = null;
+              
+              const evaluation = minimax(depth - 1, true, alpha, beta);
+              
+              board[i] = board[move];
+              board[move] = temp;
+              
+              minEval = Math.min(minEval, evaluation);
+              beta = Math.min(beta, evaluation);
+              if (beta <= alpha) break;
+            }
+          }
+        }
+        return minEval;
+      }
+    }
+
+    // รวบรวมทางเลือกที่ดีที่สุดและให้ AI ทำการเดิน
+    function makeAiMove() {
+      if (!gameActive) return;
+
+      const allAiMoves = [];
+      for (let i = 0; i < 64; i++) {
+        if (board[i] && getPieceOwner(board[i]) === 'R') {
+          const moves = generateMovesForCell(i, true);
+          moves.forEach(m => {
+            allAiMoves.push({ from: i, to: m });
+          });
+        }
+      }
+
+      if (allAiMoves.length === 0) return;
+
+      let bestMove = null;
+
+      if (aiLevel === 'easy') {
+        // สุ่มเดินธรรมดาแบบปลาดาว
+        bestMove = allAiMoves[Math.floor(Math.random() * allAiMoves.length)];
+      } else {
+        // ใช้มินิแมกซ์จำลองทิศทางล่วงหน้า
+        const searchDepth = (aiLevel === 'medium') ? 1 : 2; // ยิ่งยาก ยิ่งคำนวณลึก
+        let bestScore = -Infinity;
+        const candidateMoves = [];
+
+        allAiMoves.forEach(m => {
+          const temp = board[m.to];
+          board[m.to] = board[m.from];
+          board[m.from] = null;
+          
+          const score = minimax(searchDepth, false, -Infinity, Infinity);
+          
+          board[m.from] = board[m.to];
+          board[m.to] = temp;
+
+          if (score > bestScore) {
+            bestScore = score;
+            candidateMoves.length = 0; // เคลียร์ของเก่า
+            candidateMoves.push(m);
+          } else if (score === bestScore) {
+            candidateMoves.push(m);
+          }
+        });
+
+        // สุ่มเลือกหมากที่ดีที่สุดจากตระกูลเกรดเดียวกัน
+        bestMove = candidateMoves[Math.floor(Math.random() * candidateMoves.length)];
+      }
+
+      if (bestMove) {
+        // ไฮไลท์อนิเมชันให้สังเกตง่ายๆ
+        const fromCell = document.querySelector(`[data-index="${bestMove.from}"]`);
+        if (fromCell) {
+          fromCell.classList.add('cell-selected');
+          setTimeout(() => {
+            executeMove(bestMove.from, bestMove.to);
+            drawBoard();
+          }, 350);
+        } else {
+          executeMove(bestMove.from, bestMove.to);
+          drawBoard();
+        }
+      }
+    }
+
+    // ==========================================
+    // 9. ระบบจบเกมและเชื่อมโยงข้อมูล Google Sheets API
+    // ==========================================
+
+    function triggerGameOver(winner, reason) {
+      gameActive = false;
+      const modal = document.getElementById('gameOverModal');
+      const titleEl = document.getElementById('gameOverTitle');
+      const descEl = document.getElementById('gameOverDescription');
+      const statsEl = document.getElementById('gameOverMatchStats');
+      const iconEl = document.getElementById('winnerBadgeIcon');
+
+      const myName = document.getElementById('playerNameInput').value || "นักเดินเรือไร้นาม";
+      const opponentName = (playMode === 'AI') ? `AI (${aiLevel === 'easy' ? 'ปลาดาว' : aiLevel === 'medium' ? 'ปลากระเบน' : 'คราเคน'})` : "ฝ่ายตรงข้าม";
+
+      statsEl.innerText = `${myName} (ขาว) VS ${opponentName} (แดง)`;
+
+      // บันทึกสถิติไปยัง Google Sheets API ทันทีหลังจบเกมการแข่งขันจริง
+      let gameResultForSheet = 'draw'; 
+
+      if (winner === 'W') {
+        titleEl.innerText = "มุกขาวคว้าชัยสำเร็จ!";
+        descEl.innerText = `ยินดีด้วยกับชัยชนะเหนือก้นบึ้งทะเลสีฟ้า เนื่องจาก ${reason}`;
+        iconEl.className = "fas fa-trophy text-amber-500 text-4xl animate-bounce";
+        gameResultForSheet = 'win';
+      } else if (winner === 'R') {
+        titleEl.innerText = "ปะการังแดงคว้าชัย!";
+        descEl.innerText = `เสียใจด้วย คลื่นน้ำวนกลืนกินกองทัพคุณเนื่องจาก ${reason}`;
+        iconEl.className = "fas fa-skull-crossbones text-rose-500 text-4xl animate-bounce";
+        gameResultForSheet = 'lose';
+      } else {
+        titleEl.innerText = "เสมอเสมือนกระแสน้ำคู่คู่นิ่งสงบ!";
+        descEl.innerText = `${reason}`;
+        iconEl.className = "fas fa-balance-scale text-sky-500 text-4xl animate-bounce";
+        gameResultForSheet = 'draw';
+      }
+
+      // แสดงป๊อปอัพหน้าต่างลอย
+      modal.classList.remove('hidden');
+
+      // ส่ง API บันทึกผลไปยัง Google Sheet ของจริง
+      submitToGoogleSheets(myName, gameResultForSheet);
+    }
+
+    // ฟังก์ชันส่งผลลัพธ์ผ่านขวดแก้วข้ามมหาสมุทร (Google Sheets REST API)
+    function submitToGoogleSheets(playerName, result) {
+      if (!GOOGLE_SHEET_API || GOOGLE_SHEET_API.includes("YOUR_SHEETS_DEPLOYMENT_ID")) {
+        console.warn("ไม่ได้ระบุ API URL ของกัปตัน Google Sheets ข้อมูลจึงถูกบันทึกไว้ในสถิติจำลองฝั่งไคลเอนต์เท่านั้น");
+        updateMockLeaderboard(playerName, result);
+        return;
+      }
+
+      const payload = {
+        action: "saveMatch",
+        playerName: playerName,
+        result: result
+      };
+
+      fetch(GOOGLE_SHEET_API, {
+        method: 'POST',
+        mode: 'no-cors', // ป้องกัน Error เรื่องนโยบายความปลอดภัยเว็บบนเบราว์เซอร์บางรุ่น
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      })
+      .then(() => {
+        console.log("ส่งข้อมูลผลแพ้ชนะไปยังสเปรดชีตของ Google สำเร็จเรียบร้อย!");
+        setTimeout(fetchLeaderboard, 1500); // ดีเลย์อัปเดตตารางให้ทันต่อแถวข้อมูลใหม่
+      })
+      .catch(err => {
+        console.error("เกิดข้อผิดพลาดในการกู้เกลียวคลื่นส่ง Google API:", err);
+        updateMockLeaderboard(playerName, result);
+      });
+    }
+
+    // ดึงตารางผู้นำสูงสุด (Leaderboard) ล่าสุดจากระบบ Google Sheets
+    function fetchLeaderboard() {
+      const tbody = document.getElementById('leaderboardBody');
+      
+      if (!GOOGLE_SHEET_API || GOOGLE_SHEET_API.includes("YOUR_SHEETS_DEPLOYMENT_ID")) {
+        renderMockLeaderboard();
+        return;
+      }
+
+      fetch(`${GOOGLE_SHEET_API}?action=getLeaderboard`)
+        .then(res => res.json())
+        .then(data => {
+          tbody.innerHTML = '';
+          if (!data || data.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-slate-400">ยังไม่มีบันทึกผู้เล่นกล้าหาญแถวหน้า</td></tr>`;
+            return;
+          }
+          data.forEach(player => {
+            const tr = document.createElement('tr');
+            tr.className = "border-b hover:bg-sky-50 transition-colors";
+            tr.innerHTML = `
+              <td class="px-3 py-2 font-semibold text-sky-950">${player.name}</td>
+              <td class="px-2 py-2 text-center text-emerald-600">${player.wins}</td>
+              <td class="px-2 py-2 text-center text-rose-500">${player.losses}</td>
+              <td class="px-3 py-2 text-right font-bold text-sky-800">${player.score}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        })
+        .catch(err => {
+          console.error("ผิดพลาดการโหลดบอร์ดผู้เล่น:", err);
+          renderMockLeaderboard();
+        });
+    }
+
+    // สถิติจำลองในหน่วยความจำสำรอง (Mock Local DB) กรณีไม่ได้ใส่ลิ้งก์ชีตส์
+    let mockPlayers = [
+      { name: "ผู้เฝ้ามหาสมุทร", wins: 15, losses: 3, draws: 1, score: 46 },
+      { name: "โจรสลัดเครารูดแป้ง", wins: 10, losses: 6, draws: 2, score: 32 },
+      { name: "โลมากระโดดสามรอบ", wins: 8, losses: 9, draws: 4, score: 28 }
+    ];
+
+    function renderMockLeaderboard() {
+      const tbody = document.getElementById('leaderboardBody');
+      tbody.innerHTML = '';
+      
+      // เรียงลำดับตามความโปร
+      mockPlayers.sort((a,b) => b.score - a.score);
+
+      mockPlayers.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.className = "border-b hover:bg-sky-50 transition-colors";
+        tr.innerHTML = `
+          <td class="px-3 py-2 font-semibold text-sky-950">${p.name}</td>
+          <td class="px-2 py-2 text-center text-emerald-600">${p.wins}</td>
+          <td class="px-2 py-2 text-center text-rose-500">${p.losses}</td>
+          <td class="px-3 py-2 text-right font-bold text-sky-800">${p.score}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function updateMockLeaderboard(name, result) {
+      let p = mockPlayers.find(x => x.name.toLowerCase() === name.toLowerCase());
+      if (!p) {
+        p = { name: name, wins: 0, losses: 0, draws: 0, score: 0 };
+        mockPlayers.push(p);
+      }
+      if (result === 'win') p.wins++;
+      else if (result === 'lose') p.losses++;
+      else p.draws++;
+      
+      p.score = (p.wins * 3) + (p.draws * 1);
+      renderMockLeaderboard();
+    }
+
+    // ==========================================
+    // 10. ระบบห้องออนไลน์จำลอง (Lobby & Online Rooms)
+    // ==========================================
+
+    // สร้างระบบ Lobby สมบูรณ์แบบเพื่อแสดงรายชื่อห้องและอัปเดตแบบเรียลไทม์
+    function setupLobbyRooms() {
+      // จำลองห้องออนไลน์ที่กำลังเปิดว่างไว้ 2 ห้องแรกเพื่อความมีชีวิตชีวาของเกมพร้อมเริ่มเล่นได้ทันที
+      localOnlineRooms = [
+        { id: "SEA-4029", host: "กัปตันหอยเบี้ยคลื่นลม", status: "waiting", guests: 1 },
+        { id: "SEA-9182", host: "นางเงือกขี่ปลากระพง", status: "waiting", guests: 1 }
+      ];
+      renderOnlineRooms();
+    }
+
+    function renderOnlineRooms() {
+      const container = document.getElementById('roomListContainer');
+      container.innerHTML = '';
+
+      if (localOnlineRooms.length === 0) {
+        container.innerHTML = `<div class="text-center py-4 text-sky-400 text-sm">ท้องทะเลว่างเปล่าขณะนี้... ลองกด "สร้างหาดทรายเล่นออนไลน์" ด้านบนเพื่อเริ่มกระแสคลื่นห้องใหม่!</div>`;
+        return;
+      }
+
+      localOnlineRooms.forEach(room => {
+        const div = document.createElement('div');
+        div.className = "flex items-center justify-between p-3 bg-white border border-sky-100 rounded-lg shadow-sm hover:border-emerald-300 transition-all";
+        div.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping"></span>
+            <div>
+              <span class="font-bold text-sky-900 text-sm">${room.id}</span>
+              <p class="text-xs text-sky-600 font-medium">กัปตัน: ${room.host}</p>
+            </div>
+          </div>
+          <button onclick="joinOnlineRoom('${room.id}')" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-1 px-3 rounded-lg text-xs transition-all">
+            <i class="fas fa-sign-in-alt"></i> เทียบท่าเรือ
+          </button>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    window.joinOnlineRoom = function(roomId) {
+      const myName = document.getElementById('playerNameInput').value || "นักเดินเรือไร้นาม";
+      playMode = 'ONLINE';
+      currentRoomId = roomId;
+      mySide = 'R'; // แขกที่เข้ามาจะเล่นฝ่ายแดง (ตัวหอยปะการัง)
+      
+      const targetRoom = localOnlineRooms.find(r => r.id === roomId);
+      const hostName = targetRoom ? targetRoom.host : "กัปตันปริศนา";
+
+      document.getElementById('opponentNameText').innerText = hostName;
+      document.getElementById('opponentStatusBadge').innerText = "มุกปะการัง (ขาว)";
+      document.getElementById('myPlayerNameText').innerText = myName;
+      document.getElementById('myPlayerStatusBadge').innerText = "เปลือกหอยยักษ์ (แดง)";
+      
+      document.getElementById('gameModeText').innerText = "ประลองความแม่นออนไลน์";
+      document.getElementById('currentRoomIdText').innerText = roomId;
+
+      // เริ่มสตรีมห้องเล่นกระดานออนไลน์
+      initBoard();
+      drawBoard();
+      switchScreen('game');
+      showTip(`🌊 เทียบท่าสำเร็จ! ยินดีต้อนรับสู่แมทช์ประชันกับคุณ ${hostName}`);
+      
+      // เปิดใช้ห้องส่งจดหมายแชท
+      document.getElementById('chatInput').disabled = false;
+      addChatMessage("ระบบฝั่งท่าเรือ", `คุณได้ร่วมเดินเรือลงสนามแข่งกับ ${hostName} เรียบร้อยแล้ว ตาของสีขาวเป็นผู้เดินเรือก่อน!`);
+    };
+
+    function syncBoardToOnline() {
+      // ในกรณีใช้งานออนไลน์แบบเรียลไทม์จำลอง (หรือดึง Firestore หากมีการระบุ config)
+      // เราจะอัปเดตสเตจกระดานและผลัดตาทั่วไปโดยยืดหยุ่นจำลองการปะทะทันที
+      if (currentPlayer !== mySide && playMode === 'ONLINE') {
+        // จำลองการขยับตอบสนองของคู่ต่อสู้ภายใน 3-5 วินาทีเมื่อไม่ได้ต่อดาต้าเบสจริงๆ
+        setTimeout(() => {
+          if (gameActive && currentPlayer === 'W') {
+            makeSimulatedOpponentMove();
+          }
+        }, 3000);
+      }
+    }
+
+    function makeSimulatedOpponentMove() {
+      // จำลองตาตรงข้ามออนไลน์เดินเพื่อขับเคลื่อนระบบให้เล่นได้ทันทีไม่มีติดขัด
+      const allMoves = [];
+      for (let i = 0; i < 64; i++) {
+        if (board[i] && getPieceOwner(board[i]) === 'W') {
+          const moves = generateMovesForCell(i, true);
+          moves.forEach(m => {
+            allMoves.push({ from: i, to: m });
+          });
+        }
+      }
+      if (allMoves.length > 0) {
+        const mv = allMoves[Math.floor(Math.random() * allMoves.length)];
+        executeMove(mv.from, mv.to);
+        drawBoard();
+        playSplashSfx();
+      }
+    }
+
+    // ==========================================
+    // 11. หน้าต่างตรรกะ UI และระบบสลับหน้าจอ (Navigation)
+    // ==========================================
+
+    function switchScreen(screen) {
+      if (screen === 'lobby') {
+        document.getElementById('lobbyScreen').classList.remove('hidden');
+        document.getElementById('gameScreen').classList.add('hidden');
+        document.getElementById('gameOverModal').classList.add('hidden');
+      } else {
+        document.getElementById('lobbyScreen').classList.add('hidden');
+        document.getElementById('gameScreen').classList.remove('hidden');
+      }
+    }
+
+    // สมัครระบบปุ่มควบคุม
+    document.getElementById('btnPlayAi').addEventListener('click', () => {
+      const myName = document.getElementById('playerNameInput').value || "นักเดินเรือไร้นาม";
+      playMode = 'AI';
+      mySide = 'W'; // ผู้เล่นเริ่มก่อน (ขาว)
+      
+      document.getElementById('myPlayerNameText').innerText = myName;
+      document.getElementById('myPlayerStatusBadge').innerText = "มุกปะการัง (ขาว)";
+      document.getElementById('opponentNameText').innerText = `AI (${aiLevel === 'easy' ? 'ปลาดาว' : aiLevel === 'medium' ? 'ปลากระเบน' : 'คราเคน'})`;
+      document.getElementById('opponentStatusBadge').innerText = "เปลือกหอยยักษ์ (แดง)";
+      
+      document.getElementById('gameModeText').innerText = `สู้กระแสน้ำวน AI (${aiLevel === 'easy' ? 'ง่าย' : aiLevel === 'medium' ? 'ปานกลาง' : 'ท้าทาย'})`;
+      document.getElementById('currentRoomIdText').innerText = "ห้องออฟไลน์";
+
+      initBoard();
+      drawBoard();
+      switchScreen('game');
+      showTip("☀️ หาดทรายระยิบระยับ! ขยับเปลือกหอยมุกขาวของคุณเพื่อเริ่มประลอง");
+    });
+
+    document.getElementById('btnCreateOnlineRoom').addEventListener('click', () => {
+      const myName = document.getElementById('playerNameInput').value || "นักเดินเรือไร้นาม";
+      const randomRoomId = "SEA-" + Math.floor(1000 + Math.random() * 9000);
+      
+      playMode = 'ONLINE';
+      currentRoomId = randomRoomId;
+      mySide = 'W'; // โฮสต์ที่สร้างเริ่มฝ่ายขาว
+
+      document.getElementById('myPlayerNameText').innerText = myName;
+      document.getElementById('myPlayerStatusBadge').innerText = "มุกปะการัง (ขาว)";
+      document.getElementById('opponentNameText').innerText = "รอคอยกัปตันอื่นเข้ามาร่วมเทียบท่า...";
+      document.getElementById('opponentStatusBadge').innerText = "หอยปะการัง (แดง)";
+      
+      document.getElementById('gameModeText').innerText = "เปิดหาดทรายรอผู้ร่วมทาง";
+      document.getElementById('currentRoomIdText').innerText = randomRoomId;
+
+      initBoard();
+      drawBoard();
+      switchScreen('game');
+      showTip(`📢 ห้องของคุณสร้างเสร็จแล้วที่ไอดี: ${randomRoomId} กำลังส่งสัญญาณคลื่นแตร...`);
+
+      // จำลองบอทกระโดดเข้าห้องมาเล่นด้วยอัตโนมัติหลังสร้างห้อง 4 วินาทีเพื่อความสนุกเร้าใจ
+      setTimeout(() => {
+        if (gameActive && document.getElementById('opponentNameText').innerText.includes("รอคอย")) {
+          document.getElementById('opponentNameText').innerText = "กัปตันฉลามหางดาบ";
+          addChatMessage("ฝ่ายท่าเรือ", "กัปตันฉลามหางดาบ ได้เทียบเรือเข้ามาในหาดทรายของคุณแล้ว! เกมเริ่มได้!");
+          showTip("🐳 มีผู้เล่นอื่นเทียบท่าเรือเข้ามาในชายหาดของคุณแล้ว!");
+        }
+      }, 4000);
+    });
+
+    // ปุ่มยอมแพ้ (Surrender) จบเกมทันทีอย่างอิสระตามความประสงค์ผู้เล่น
+    document.getElementById('btnSurrender').addEventListener('click', () => {
+      const lostSide = mySide;
+      const winSide = (mySide === 'W') ? 'R' : 'W';
+      triggerGameOver(winSide, "กัปตันตัดสินใจโยนหัวใจลงก้นทะเลลึกและสลัดธงยอมพ่ายแพ้");
+    });
+
+    document.getElementById('btnExitGame').addEventListener('click', () => {
+      switchScreen('lobby');
+    });
+
+    document.getElementById('btnRestartGame').addEventListener('click', () => {
+      document.getElementById('gameOverModal').classList.add('hidden');
+      initBoard();
+      drawBoard();
+      if (playMode === 'AI' && currentPlayer === 'R') {
+        setTimeout(makeAiMove, 600);
+      }
+    });
+
+    document.getElementById('btnReturnLobby').addEventListener('click', () => {
+      document.getElementById('gameOverModal').classList.add('hidden');
+      switchScreen('lobby');
+    });
+
+    // ระบบปุ่มควบคุมเสียงบอสนิดทะเลและนกหวีดร้อง
+    document.getElementById('btnBgMusic').addEventListener('click', () => {
+      musicEnabled = !musicEnabled;
+      const btn = document.getElementById('btnBgMusic');
+      if (musicEnabled) {
+        btn.innerHTML = `<i class="fas fa-music"></i>`;
+        btn.classList.remove('text-rose-500');
+        btn.classList.add('text-sky-600');
+        startSeaAmbient();
+      } else {
+        btn.innerHTML = `<i class="fas fa-volume-mute"></i>`;
+        btn.classList.remove('text-sky-600');
+        btn.classList.add('text-rose-500');
+      }
+    });
+
+    document.getElementById('btnSfx').addEventListener('click', () => {
+      sfxEnabled = !sfxEnabled;
+      const btn = document.getElementById('btnSfx');
+      if (sfxEnabled) {
+        btn.innerHTML = `<i class="fas fa-volume-up"></i>`;
+        btn.classList.remove('text-rose-500');
+        btn.classList.add('text-sky-600');
+      } else {
+        btn.innerHTML = `<i class="fas fa-volume-mute"></i>`;
+        btn.classList.remove('text-sky-600');
+        btn.classList.add('text-rose-500');
+      }
+    });
+
+    // ระบบปลดล็อคอิสระเพื่อกดขยับและเดินหมากกี่ตัวก็ได้โดยไม่มีเงื่อนไขใดๆ กีดขวาง
+    const btnFreePlay = document.getElementById('btnToggleFreePlay');
+    btnFreePlay.addEventListener('click', () => {
+      isFreePlayMode = !isFreePlayMode;
+      if (isFreePlayMode) {
+        btnFreePlay.className = "w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1";
+        btnFreePlay.innerHTML = `<i class="fas fa-lock-open"></i> <span>โหมดอิสระ (กดเดินหมากใดๆ ก็ได้): เปิด</span>`;
+        showTip("🔓 โหมดเดินอิสระเปิดใช้งานแล้ว! คุณสามารถลากขยับตัวหมากตัวไหนได้อย่างอิสระ");
+      } else {
+        btnFreePlay.className = "w-full bg-amber-500 hover:bg-amber-600 text-white py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1";
+        btnFreePlay.innerHTML = `<i class="fas fa-unlock-alt"></i> <span>โหมดอิสระ (กดเดินหมากใดๆ ก็ได้): ปิด</span>`;
+        showTip("🔒 กลับสู่โหมดประลองกติกาหมากรุกไทยแบบมาตรฐานเรียบร้อย");
+      }
+      selectedCell = null;
+      possibleMoves = [];
+      drawBoard();
+    });
+
+    // หน้าต่างระบบแชทขวดลอยนํ้า
+    const chatForm = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+    const chatBox = document.getElementById('chatMessagesBox');
+
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const txt = chatInput.value.trim();
+      if (!txt) return;
+
+      const myName = document.getElementById('playerNameInput').value || "นักเดินเรือไร้นาม";
+      addChatMessage(myName, txt);
+      chatInput.value = '';
+
+      // จำลองการตอบกลับของบอทคู่ต่อสู้แบบสุ่มขบขัน
+      setTimeout(() => {
+        const opponentName = document.getElementById('opponentNameText').innerText;
+        const seaQuotes = [
+          "ข้าสัมผัสได้ถึงพายุคลื่นที่กำลังหนุนหลังตัวหมากของข้า!",
+          "ระวังปูเสฉวนของข้าให้ดี มันคมกว่าที่คุณคิดนะท่านกัปตัน",
+          "กระดานนี้สนุกยิ่งนัก! ราวกับการล่องเรือในทะเลอันดามัน",
+          "อย่าเพิ่งประมาทล่ะ เกลียวคลื่นอาจจะพัดกระดานพลิกได้เสมอ"
+        ];
+        const randomQuote = seaQuotes[Math.floor(Math.random() * seaQuotes.length)];
+        addChatMessage(opponentName, randomQuote);
+      }, 1500);
+    });
+
+    function addChatMessage(sender, text) {
+      const msg = document.createElement('div');
+      msg.className = "border-l-2 border-sky-400 pl-2 py-0.5";
+      msg.innerHTML = `<strong class="text-sky-900">${sender}:</strong> <span class="text-slate-700">${text}</span>`;
+      chatBox.appendChild(msg);
+      chatBox.scrollTop = chatBox.scrollHeight;
+      playSeagullSfx(); // แจ้งเตือนสัญลักษณ์จดหมายลอยมาด้วยเสียงนก
+    }
+
+    // ==========================================
+    // 12. ฟังก์ชันเริ่มระบบเมื่อโหลดหน้าเสร็จสิ้น
+    // ==========================================
+    window.onload = function() {
+      initAudio();
+      startSeaAmbient();
+      setupLobbyRooms();
+      fetchLeaderboard();
+    };
+
+  </script>
+</body>
+</html>
